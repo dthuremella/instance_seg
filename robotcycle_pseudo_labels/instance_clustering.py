@@ -166,6 +166,9 @@ sem_label = remap_lut[sem_label]
 sem_label_set = list(set(sem_label))
 sem_label_set.sort()
 
+import pdb; pdb.set_trace()
+
+
 # Start clustering
 cluster = []
 inst_id = 0
