@@ -13,6 +13,7 @@ import open3d as o3d
 from cyclelane_heatmap_generation import P, map_names, pixels, latlongs, m_pixels_to_xy, m_xy_to_pixels
 from cyclelane_heatmap_generation import LonLat_To_XY, XY_To_LonLat, pixels_to_latlong, latlong_to_pixels, point_cloud_center, point_cloud_volume
 
+save_npy = False
 
 learning_map={0 : 0,     # "unlabeled"
     1 : 0,     # "outlier" mapped to "unlabeled" --------------------------mapped       x
@@ -194,7 +195,8 @@ def gen_labels(scan_name, label_name, label_output_dir):
         # print(time.time()-start)
         # print('*'*80)
         cluster = np.array(cluster)
-        # np.save(label_output_dir+'/'+label_name.split('/')[-1].split('.')[0]+".npy", cluster)
+        if save_npy:
+            np.save(label_output_dir+'/'+label_name.split('/')[-1].split('.')[0]+".npy", cluster)
 
         # if 'path' in FLAGS.pub_or_path:
         #     np.save(label_output_dir+'/'+label_name.split('/')[-1].split('.')[0]+".npy", cluster)
@@ -251,6 +253,8 @@ plot_cluster = False
 offset = 20 # calculated by eye for map, for x and y
 
 print_info = False
+
+save_npy = False
 
 ########################################################
 
