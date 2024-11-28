@@ -1,7 +1,7 @@
 import numpy as np
 import pcl
 import open3d as o3d
-from dbscan import DBSCAN
+from sklearn.cluster import DBSCAN
 
 from os import listdir
 from os.path import isfile, join
@@ -296,8 +296,16 @@ def main():
 
     assert len(bin_files) == len(label_files), "bin files and label files are not same length"
     for i in range(len(bin_files)):
+        print ('i = {} out of {}'.format(i, len(bin_files)))
+        if i % 50 != 0: 
+            continue
         bin_file = bin_files[i]
         label_file = label_files[i]
+        # if int(bin_file.split('/')[-1].split('.')[0]) < 17324184471833792: # for central loop
+        #     continue
+        # if int(bin_file.split('/')[-1].split('.')[0]) < 17314107088439474: # for north loop
+        #     continue
+        
         print('doing ' + bin_file)
         cluster = get_labels_instances(bin_file_folder + '/' + bin_file, 
                             label_file_folder + '/' + label_file, 
