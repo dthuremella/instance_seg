@@ -10,9 +10,9 @@ import pickle
 import pandas as pd
 import open3d as o3d
 
-from cyclelane_heatmap_generation import P, map_names, pixels, latlongs, m_pixels_to_xy, m_xy_to_pixels
+from cyclelane_heatmap_generation import P, m_pixels_to_xy, m_xy_to_pixels
 from cyclelane_heatmap_generation import LonLat_To_XY, XY_To_LonLat, pixels_to_latlong, latlong_to_pixels, point_cloud_center, point_cloud_volume
-
+from segmentation_to_instance import get_labels_instances
 save_npy = False
 
 learning_map={0 : 0,     # "unlabeled"
@@ -256,6 +256,8 @@ print_info = False
 
 save_npy = False
 
+sample_every_100th = False
+
 ########################################################
 
 
@@ -288,20 +290,23 @@ def main():
 
     assert len(bin_files) == len(label_files), "bin files and label files are not same length"
     for i in range(len(bin_files)):
-        bin_file = bin_files[i]
-        label_file = label_files[i]
-        print('doing ' + bin_file)
-        cluster = gen_labels(bin_file_folder + '/' + bin_file, 
-                            label_file_folder + '/' + label_file, 
-                            output_file_folder)
-        
+        if sample_every_100th and i % 100 != 0: 
+            continue
+        print ('i = {} out of {}'.format(i, len(bin_files)))
         #calculate timestamp
         filenumber = bin_file.split('/')[-1].split('.')[0]
         if filenumber not in filename_to_timestamp:
             print(filenumber + ' not in dict')
             continue
-
         timestamp = int(filename_to_timestamp[filenumber])
+
+        bin_file = bin_files[i]
+        label_file = label_files[i]
+        print('doing ' + bin_file)
+        cluster = get_labels_instances(bin_file_folder + '/' + bin_file, 
+                            label_file_folder + '/' + label_file, 
+                            output_file_folder)
+        
         print('doing file ' + filenumber + ' timestamp {}'.format(timestamp))
         latlong = interpolate(gps_timestamps, timestamp, 'gps')
         if print_info: print(latlong)

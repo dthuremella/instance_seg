@@ -1,5 +1,7 @@
 import numpy as np
 import pcl
+import open3d as o3d
+from dbscan import DBSCAN
 
 from os import listdir
 from os.path import isfile, join
@@ -195,23 +197,108 @@ def gen_labels(scan_name, label_name, label_output_dir):
 
         return cluster 
 
-bin_file_folder = '/Volumes/scratchdata/efimia/robotcycle_central_loop/concat_pc_bin_files'
-label_file_folder = 'central_loop_concat_cylinder_8x'
-output_file_folder = 'central_loop_clustering_instance_seg_labeled'
+def get_labels_instances(scan_name, label_name, learning_map):
+    scan = np.fromfile(scan_name, dtype=np.float32).reshape((-1, 4))
+    points = scan[:, 0:4]
+    label = np.fromfile(label_name, dtype=np.uint32).reshape((-1))
+    assert label.shape[0] == points.shape[0], "Scan and Label don't contain the same number of points"
+
+    sem_label = label & 0xFFFF
+    inst_label = label >> 16
+    assert (sem_label + (inst_label << 16) == label).all(), "Invalid label format"
+
+    max_key = max(learning_map.keys())
+    remap_lut = np.zeros((max_key + 100), dtype=np.int32)
+    remap_lut[list(learning_map.keys())] = list(learning_map.values())
+
+    sem_label = remap_lut[sem_label]
+    sem_label_set = list(set(sem_label))
+    sem_label_set.sort()
+
+    # Start clustering
+    cluster = []
+    inst_id = 0
+
+    for label_i in sem_label_set:
+        index = np.argwhere(sem_label == label_i).reshape(-1)
+        sem_cluster = points[index]
+
+        tmp_inst_label = inst_label[index]
+        tmp_inst_set = np.unique(tmp_inst_label)
+
+        if label_i in [20, 31, 32, 33, 34, 35, 36]:  # discard unlabeled, outliers, moving objects
+            continue
+        elif label_i in [9, 10]:  # road/parking, dont need to cluster
+            inst_cluster = np.hstack((sem_cluster, np.full((sem_cluster.shape[0], 1), label_i, dtype=np.uint32)))
+            inst_cluster = np.hstack((inst_cluster, np.full((inst_cluster.shape[0], 1), inst_id, dtype=np.uint32)))
+            inst_id += 1
+            cluster.extend(inst_cluster)
+            continue
+        elif len(tmp_inst_set) > 1 or (len(tmp_inst_set) == 1 and tmp_inst_set[0] != 0):  # have instance labels
+            for label_j in tmp_inst_set:
+                points_index = np.argwhere(tmp_inst_label == label_j).reshape(-1)
+                if len(points_index) <= 20:
+                    continue
+                inst_cluster = sem_cluster[points_index]
+                inst_cluster = np.hstack((inst_cluster, np.full((inst_cluster.shape[0], 1), label_i, dtype=np.uint32)))
+                inst_cluster = np.hstack((inst_cluster, np.full((inst_cluster.shape[0], 1), inst_id, dtype=np.uint32)))
+                inst_id += 1
+                cluster.extend(inst_cluster)
+        else:  # Euclidean cluster
+            if label_i in [1, 4, 5, 14]:  # car truck other-vehicle fence
+                cluster_tolerance = 0.5
+            elif label_i in [11, 12, 13, 15, 17]:  # sidewalk other-ground building vegetation terrain
+                cluster_tolerance = 2
+            else:
+                cluster_tolerance = 0.2
+
+            if label_i in [16, 19]:  # trunk traffic-sign
+                min_size = 50
+            elif label_i == 15:  # vegetation
+                min_size = 200
+            elif label_i in [11, 12, 13, 17]:  # sidewalk other-ground building terrain
+                min_size = 300
+            else:
+                min_size = 100
+
+            cloud = o3d.geometry.PointCloud()
+            cloud.points = o3d.utility.Vector3dVector(sem_cluster[:, 0:3])
+            dbscan = DBSCAN(eps=cluster_tolerance, min_samples=min_size)
+            labels = dbscan.fit_predict(sem_cluster[:, :3])
+            max_label = labels.max()
+            clusters = []
+            for label_j in range(max_label + 1):
+                indices = np.where(labels == label_j)[0]
+                inst_cluster = sem_cluster[indices, :4]
+                inst_cluster = np.hstack((inst_cluster, np.full((inst_cluster.shape[0], 1), label_i, dtype=np.uint32)))
+                inst_cluster = np.hstack((inst_cluster, np.full((inst_cluster.shape[0], 1), inst_id, dtype=np.uint32)))
+                inst_id += 1
+                cluster.extend(inst_cluster)
+
+    cluster = np.asarray(cluster)
+
+    return cluster
+
+def main():
+    bin_file_folder = '/Volumes/scratchdata/efimia/robotcycle_central_loop/concat_pc_bin_files'
+    label_file_folder = 'central_loop_concat_cylinder_8x'
+    output_file_folder = 'central_loop_clustering_instance_seg_labeled'
 
 
-bin_files = [f for f in listdir(bin_file_folder) if isfile(join(bin_file_folder, f))]
-label_files = [f for f in listdir(label_file_folder) if isfile(join(label_file_folder, f))]
+    bin_files = [f for f in listdir(bin_file_folder) if isfile(join(bin_file_folder, f))]
+    label_files = [f for f in listdir(label_file_folder) if isfile(join(label_file_folder, f))]
 
-bin_files.sort()
-label_files.sort()
+    bin_files.sort()
+    label_files.sort()
 
-assert len(bin_files) == len(label_files), "bin files and label files are not same length"
-for i in range(len(bin_files)):
-    bin_file = bin_files[i]
-    label_file = label_files[i]
-    print('doing ' + bin_file)
-    cluster = gen_labels(bin_file_folder + '/' + bin_file, 
-                        label_file_folder + '/' + label_file, 
-                        output_file_folder)
+    assert len(bin_files) == len(label_files), "bin files and label files are not same length"
+    for i in range(len(bin_files)):
+        bin_file = bin_files[i]
+        label_file = label_files[i]
+        print('doing ' + bin_file)
+        cluster = get_labels_instances(bin_file_folder + '/' + bin_file, 
+                            label_file_folder + '/' + label_file, 
+                            output_file_folder)
     
+if __name__ == '__main__':
+    main()
