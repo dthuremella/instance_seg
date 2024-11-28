@@ -213,7 +213,7 @@ map_prefix = 'north'
 csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-10-18-15-10-24/motion'
 
 bin_file_folder = '/Volumes/scratchdata/efimia/robotcycle_{}_loop/concat_pc_bin_files'.format(map_prefix)
-label_file_folder = '{}_loop_concat_cylinder_8x'.format(map_prefix)
+label_file_folder = '{}_loop_concat_cylinder8x'.format(map_prefix)
 output_file_folder = '{}_loop_clustering_instance_seg_labeled'.format(map_prefix)
 translation_pkl_file = '{}_loop_concat_to_right_translation.pkl'.format(map_prefix)
 map_name = '{}loop'.format(map_prefix)
