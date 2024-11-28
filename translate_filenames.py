@@ -15,7 +15,7 @@ right_timestamps_list = sorted(data.split("\n"))
 my_file.close()
 
 translation = {}
-for i in range(len(right_timestamps_list)):
+for i in range(len(concat_files)):
     concat_file = concat_files[i].split('.')[0]
     right_file = right_timestamps_list[i]
 
