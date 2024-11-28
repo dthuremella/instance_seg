@@ -195,9 +195,9 @@ def gen_labels(scan_name, label_name, label_output_dir):
 
         return cluster 
 
-bin_file_folder = 'robotcycle_concat_bin'
-label_file_folder = 'concat_cylinder_8x'
-output_file_folder = 'clustering_instance_seg_labeled'
+bin_file_folder = '/Volumes/scratchdata/efimia/robotcycle_central_loop/concat_pc_bin_files'
+label_file_folder = 'central_loop_concat_cylinder_8x'
+output_file_folder = 'central_loop_clustering_instance_seg_labeled'
 
 
 bin_files = [f for f in listdir(bin_file_folder) if isfile(join(bin_file_folder, f))]
