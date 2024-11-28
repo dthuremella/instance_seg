@@ -284,7 +284,7 @@ def get_labels_instances(scan_name, label_name, label_output_dir, save_npy=False
 
 def main():
     bin_file_folder = '/Volumes/scratchdata/efimia/robotcycle_central_loop/concat_pc_bin_files'
-    label_file_folder = 'central_loop_concat_cylinder_8x'
+    label_file_folder = 'central_loop_concat_cylinder8x'
     output_file_folder = 'central_loop_clustering_instance_seg_labeled'
 
 
@@ -301,8 +301,8 @@ def main():
             continue
         bin_file = bin_files[i]
         label_file = label_files[i]
-        # if int(bin_file.split('/')[-1].split('.')[0]) < 17324184471833792: # for central loop
-        #     continue
+        if int(bin_file.split('/')[-1].split('.')[0]) < 17324184471833792: # for central loop
+            continue
         # if int(bin_file.split('/')[-1].split('.')[0]) < 17314107088439474: # for north loop
         #     continue
         
