@@ -283,9 +283,10 @@ def get_labels_instances(scan_name, label_name, label_output_dir, save_npy=False
     return cluster
 
 def main():
-    bin_file_folder = '/Volumes/scratchdata/efimia/robotcycle_central_loop/concat_pc_bin_files'
-    label_file_folder = 'central_loop_concat_cylinder_8x'
-    output_file_folder = 'central_loop_clustering_instance_seg_labeled'
+    bin_file_folder = '/Volumes/scratchdata/efimia/robotcycle_south_loop/concat_pc_bin_files'
+    # bin_file_folder = 'south_loop_unrotated_bin' # local
+    label_file_folder = 'south_loop_concat_cylinder8x'
+    output_file_folder = 'south_loop_clustering_instance_seg_labeled'
 
 
     bin_files = [f for f in listdir(bin_file_folder) if isfile(join(bin_file_folder, f))]
@@ -295,12 +296,15 @@ def main():
     label_files.sort()
 
     assert len(bin_files) == len(label_files), "bin files and label files are not same length"
-    for i in range(len(bin_files)):
-        print ('i = {} out of {}'.format(i, len(bin_files)))
-        if i % 50 != 0: 
+    for i in range(800, len(bin_files), 3):
+        if i % 50 == 0:
             continue
+        print ('i = {} out of {}'.format(i, len(bin_files)))
+
         bin_file = bin_files[i]
-        label_file = label_files[i]
+        label_file = label_files[i] 
+        # if i < 7300: # for south loop
+        #     continue
         # if int(bin_file.split('/')[-1].split('.')[0]) < 17324184471833792: # for central loop
         #     continue
         # if int(bin_file.split('/')[-1].split('.')[0]) < 17314107088439474: # for north loop
