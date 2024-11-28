@@ -135,31 +135,54 @@ def point_cloud_center(points):
     cz = np.mean(points[:,2])
     return np.array([cx,cy,cz])
 
+
 ############ params to change ##########################
-with open('north_loop_concat_to_right_translation.pkl', 'rb') as handle:
+map_prefix = 'north'
+csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-10-18-15-10-24/motion'
+
+bin_file_folder = '/Volumes/scratchdata/efimia/robotcycle_{}_loop/concat_pc_bin_files'.format(map_prefix)
+label_file_folder = '{}_loop_concat_cylinder_8x'.format(map_prefix)
+output_file_folder = '{}_loop_clustering_instance_seg_labeled'.format(map_prefix)
+translation_pkl_file = '{}_loop_concat_to_right_translation.pkl'.format(map_prefix)
+map_name = '{}loop'.format(map_prefix)
+
+with open(translation_pkl_file, 'rb') as handle:
     bad_dict = pickle.load(handle)
 bad_keys = [k  for  k in  bad_dict.keys()]
 bad_keys.sort()
 bad_vals = [v  for  v in  bad_dict.values()]
 bad_vals.sort()
 filename_to_timestamp = {}
-maybe_diff = 19055 - 18911
 for i in range(800, len(bad_keys)):
     key = bad_keys[i]
     val = bad_vals[i]
     filename_to_timestamp[key] = val
 
-map_name = 'northloop'
+# read image map
+im_map = plt.imread('oxford_' + map_name + '.png') # do for northloop and southloop too
+im_map[np.where(im_map[:,:,2] != 1)] = 0  # remove  except cycle_lanes and outlines
+is_cyclelane = im_map.copy()
+is_cyclelane[np.where(im_map[:,:,2]+im_map[:,:,1]+im_map[:,:,0] == 3)] = 0 #remove outlines
+is_cyclelane = is_cyclelane[:,:,2]
+road_lines = im_map[:,:,1]
+heatmap = np.zeros(im_map[:,:,0].shape)
 
-csv_dir = 'NorthLoop-2024-10-18'
+# read gps and imu csvs
+gps_filename = csv_dir + '/gps.csv'
+gps_df = pd.read_csv(gps_filename, sep=';')
+gps_timestamps = np.array(gps_df['timestamp'])
+imu_filename = csv_dir + '/imu.csv'
+imu_df = pd.read_csv(imu_filename, sep=';')
+imu_timestamps = np.array(imu_df['timestamp'])
 
-instance_seg_dir = 'clustering_instance_seg_labeled'
 
 plot_cluster = False
 
 offset = 20 # calculated by eye for map, for x and y
 
 print_info = False
+
+save_npy = False
 
 ########################################################
 
@@ -325,7 +348,7 @@ def main():
         pickle.dump(heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
     with open('im_map.pkl', 'wb') as handle:
         pickle.dump(im_map, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        
+
     import pdb; pdb.set_trace()
 
 if __name__ == '__main__':
