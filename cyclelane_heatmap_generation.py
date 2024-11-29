@@ -137,31 +137,31 @@ def point_cloud_center(points):
 
 def main():
     ############ params to change ##########################
-    with open('central_loop_concat_to_right_translation.pkl', 'rb') as handle:
-        filename_to_timestamp = pickle.load(handle)
-    #     bad_dict = pickle.load(handle)
-    # bad_keys = [k  for  k in  bad_dict.keys()]
-    # bad_keys.sort()
-    # bad_vals = [v  for  v in  bad_dict.values()]
-    # bad_vals.sort()
-    # filename_to_timestamp = {}
-    # for i in range(400, len(bad_keys)):
-    #     key = bad_keys[i]
-    #     val = bad_vals[i]
-    #     filename_to_timestamp[key] = val
+    with open('south_loop_concat_to_right_translation.pkl', 'rb') as handle:
+        # filename_to_timestamp = pickle.load(handle)
+        bad_dict = pickle.load(handle)
+    bad_keys = [k  for  k in  bad_dict.keys()]
+    bad_keys.sort()
+    bad_vals = [v  for  v in  bad_dict.values()]
+    bad_vals.sort()
+    filename_to_timestamp = {}
+    for i in range(100, len(bad_keys)):
+        key = bad_keys[i][:16]
+        val = bad_vals[i]
+        filename_to_timestamp[key] = val
 
-    map_name = 'centerloop'
+    map_name = 'southloop'
 
-    csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-11-08-11-14-25/motion' #/Volumes/scratchdata/robotcycle_exports/2024-{etc}/motion
+    csv_dir = 'south_loop_csvs' #/Volumes/scratchdata/robotcycle_exports/2024-{etc}/motion
 
-    instance_seg_dir = 'central_loop_clustering_instance_seg_labeled'
+    instance_seg_dir = 'south_loop_clustering_instance_seg_labeled'
 
     plot_cluster = False
 
     # offset = 20 # calculated by eye for map, for x and y (20 for northloop)
-    xoffset = 0   # by eye, 20 for northloop
-    yoffset = 0     # by eye, -20 for northloop
-    rot_offset = -0.1*np.pi   # by eye, 0.1*np.pi for north
+    xoffset = 0   # by eye, 20 for northloop, 0 for central
+    yoffset = 0     # by eye, -20 for northloop, 0 for central
+    rot_offset = 0   # by eye, 0.1*np.pi for north, -0.1*np.pi for central
     print_info = False
 
     ########################################################
@@ -202,7 +202,7 @@ def main():
     is_cyclelane = is_cyclelane[:,:,2]
     road_lines = im_map[:,:,1]
     heatmap = np.zeros(im_map[:,:,0].shape)
-    heatmap_points = []
+    dist_heatmap = np.zeros(im_map[:,:,0].shape) + np.inf
 
     # read instance_seg files
     instance_seg_files = [f for f in listdir(instance_seg_dir) if isfile(join(instance_seg_dir, f))]
@@ -210,6 +210,7 @@ def main():
     for f in sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0]))):
         filename = (instance_seg_dir + '/' + f)
         filenumber = filename.split('/')[-1].split('.')[0]
+        filenumber = filenumber[:16]
         if filenumber not in filename_to_timestamp:
             print(filenumber + ' not in dict')
             continue
@@ -275,6 +276,9 @@ def main():
         center_xy_extended = np.array([translation[0], translation[1], 1])
         new_center = np.matmul(center_xy_extended, m_xy_to_pixels[map_name])
         if print_info: print(new_center)
+        new_center = new_center.astype(np.int64)
+        new_center[0] += xoffset
+        new_center[1] += yoffset
 
         ppoints = vehs_top_down_pixels.astype(np.int64)
         # remove duplicates
@@ -284,13 +288,14 @@ def main():
         for p in upoints:
             if is_cyclelane[p[0], p[1]]:
                 heatmap[p[0], p[1]] += 1
-                heatmap_points.append([p[0], p[1]])
+            dist = np.linalg.norm(p - new_center)
+            dist_heatmap[p[0], p[1]] = min(dist_heatmap[p[0], p[1]], dist)
+            
 
         if plot_cluster or REMOVE_LATER == 100: 
             heatmap_mask = (heatmap > 0).astype(np.int64)
             im_map[:,:,0] = heatmap_mask
-            new_center = new_center.astype(np.int64)
-            im_map[new_center[0]+xoffset, new_center[1]+yoffset] = [1,0,0,1]
+            im_map[new_center[0], new_center[1]] = [1,0,0,1]
             fig, ax = plt.subplots()
             ax.imshow(im_map)
             ax.scatter(vehs_top_down_pixels[:,1]+xoffset, vehs_top_down_pixels[:,0]+yoffset, s=1, c='r')
@@ -329,6 +334,10 @@ def main():
 
     with open('{}_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with open('{}_dist_heatmap.pkl'.format(map_name), 'wb') as handle:
+        pickle.dump(dist_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
     with open('{}_im_map.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(im_map, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
