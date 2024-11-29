@@ -137,7 +137,7 @@ def point_cloud_center(points):
 
 def main():
     ############ params to change ##########################
-    with open('south_loop_concat_to_right_translation.pkl', 'rb') as handle:
+    with open('north_loop_concat_to_right_translation.pkl', 'rb') as handle:
         # filename_to_timestamp = pickle.load(handle)
         bad_dict = pickle.load(handle)
     bad_keys = [k  for  k in  bad_dict.keys()]
@@ -150,18 +150,18 @@ def main():
         val = bad_vals[i]
         filename_to_timestamp[key] = val
 
-    map_name = 'southloop'
+    map_name = 'northloop'
 
-    csv_dir = 'south_loop_csvs' #/Volumes/scratchdata/robotcycle_exports/2024-{etc}/motion
+    csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-10-18-15-10-24/motion'
 
-    instance_seg_dir = 'south_loop_clustering_instance_seg_labeled'
+    instance_seg_dir = 'north_loop_clustering_instance_seg_labeled'
 
     plot_cluster = False
 
     # offset = 20 # calculated by eye for map, for x and y (20 for northloop)
-    xoffset = 0   # by eye, 20 for northloop, 0 for central
-    yoffset = 0     # by eye, -20 for northloop, 0 for central
-    rot_offset = 0   # by eye, 0.1*np.pi for north, -0.1*np.pi for central
+    xoffset = 20   # by eye, 20 for northloop, 0 for central, 0 for south
+    yoffset = -20     # by eye, -20 for northloop, 0 for central, 0 for south
+    rot_offset = 0.1*np.pi   # by eye, 0.1*np.pi for north, -0.1*np.pi for central, 0 for south
     print_info = False
 
     ########################################################
@@ -337,7 +337,7 @@ def main():
 
     with open('{}_dist_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(dist_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        
+
     with open('{}_im_map.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(im_map, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
