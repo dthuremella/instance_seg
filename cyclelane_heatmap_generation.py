@@ -135,87 +135,33 @@ def point_cloud_center(points):
     cz = np.mean(points[:,2])
     return np.array([cx,cy,cz])
 
-############ params to change ##########################
-with open('north_loop_concat_to_right_translation.pkl', 'rb') as handle:
-    bad_dict = pickle.load(handle)
-bad_keys = [k  for  k in  bad_dict.keys()]
-bad_keys.sort()
-bad_vals = [v  for  v in  bad_dict.values()]
-bad_vals.sort()
-filename_to_timestamp = {}
-maybe_diff = 19055 - 18911
-for i in range(800, len(bad_keys)):
-    key = bad_keys[i]
-    val = bad_vals[i]
-    filename_to_timestamp[key] = val
-
-map_name = 'northloop'
-
-csv_dir = 'NorthLoop-2024-10-18'
-
-instance_seg_dir = 'clustering_instance_seg_labeled'
-
-plot_cluster = False
-
-offset = 20 # calculated by eye for map, for x and y
-
-print_info = False
-
-########################################################
-
-# read gps and imu csvs
-gps_filename = csv_dir + '/gps.csv'
-gps_df = pd.read_csv(gps_filename, sep=';')
-gps_timestamps = np.array(gps_df['timestamp'])
-imu_filename = csv_dir + '/imu.csv'
-imu_df = pd.read_csv(imu_filename, sep=';')
-imu_timestamps = np.array(imu_df['timestamp'])
-
-
-def interpolate(array, query, dtype):
-    i = np.searchsorted(array, query)
-    if dtype == 'gps':
-        value_i = [gps_df.iloc[i]['latitude'], gps_df.iloc[i]['longitude']]
-        value_im1 = [gps_df.iloc[i-1]['latitude'], gps_df.iloc[i-1]['longitude']]
-    else:
-        value_i = [imu_df.iloc[i]['orientation_x'], imu_df.iloc[i]['orientation_y'], imu_df.iloc[i]['orientation_z']]
-        value_im1 = [imu_df.iloc[i-1]['orientation_x'], imu_df.iloc[i-1]['orientation_y'], imu_df.iloc[i-1]['orientation_z']]
-
-    total_diff = array[i] - array[i-1]
-    diff_to_i = (array[i] - query) / total_diff
-    diff_to_im1 = (query - array[i-1]) / total_diff
-
-    ret = []
-    for j in range(len(value_i)):
-        interpolated = diff_to_i * value_i[j] + diff_to_im1 * value_im1[j]
-        ret.append(interpolated)
-    return ret
-
 def main():
     ############ params to change ##########################
-    with open('north_loop_concat_to_right_translation.pkl', 'rb') as handle:
-        bad_dict = pickle.load(handle)
-    bad_keys = [k  for  k in  bad_dict.keys()]
-    bad_keys.sort()
-    bad_vals = [v  for  v in  bad_dict.values()]
-    bad_vals.sort()
-    filename_to_timestamp = {}
-    maybe_diff = 19055 - 18911
-    for i in range(800, len(bad_keys)):
-        key = bad_keys[i]
-        val = bad_vals[i]
-        filename_to_timestamp[key] = val
+    with open('central_loop_concat_to_right_translation.pkl', 'rb') as handle:
+        filename_to_timestamp = pickle.load(handle)
+    #     bad_dict = pickle.load(handle)
+    # bad_keys = [k  for  k in  bad_dict.keys()]
+    # bad_keys.sort()
+    # bad_vals = [v  for  v in  bad_dict.values()]
+    # bad_vals.sort()
+    # filename_to_timestamp = {}
+    # for i in range(400, len(bad_keys)):
+    #     key = bad_keys[i]
+    #     val = bad_vals[i]
+    #     filename_to_timestamp[key] = val
 
-    map_name = 'northloop'
+    map_name = 'centerloop'
 
-    csv_dir = 'NorthLoop-2024-10-18'
+    csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-11-08-11-14-25/motion' #/Volumes/scratchdata/robotcycle_exports/2024-{etc}/motion
 
-    instance_seg_dir = 'clustering_instance_seg_labeled'
+    instance_seg_dir = 'central_loop_clustering_instance_seg_labeled'
 
     plot_cluster = False
 
-    offset = 20 # calculated by eye for map, for x and y
-
+    # offset = 20 # calculated by eye for map, for x and y (20 for northloop)
+    xoffset = 0   # by eye, 20 for northloop
+    yoffset = 0     # by eye, -20 for northloop
+    rot_offset = -0.1*np.pi   # by eye, 0.1*np.pi for north
     print_info = False
 
     ########################################################
@@ -227,7 +173,6 @@ def main():
     imu_filename = csv_dir + '/imu.csv'
     imu_df = pd.read_csv(imu_filename, sep=';')
     imu_timestamps = np.array(imu_df['timestamp'])
-
 
     def interpolate(array, query, dtype):
         i = np.searchsorted(array, query)
@@ -257,6 +202,7 @@ def main():
     is_cyclelane = is_cyclelane[:,:,2]
     road_lines = im_map[:,:,1]
     heatmap = np.zeros(im_map[:,:,0].shape)
+    heatmap_points = []
 
     # read instance_seg files
     instance_seg_files = [f for f in listdir(instance_seg_dir) if isfile(join(instance_seg_dir, f))]
@@ -293,7 +239,7 @@ def main():
         # which means it's WND
         # vehs_top_down = np.stack((-rotated_points[:,0][vehicle_ids], rotated_points[:,1][vehicle_ids]), axis=1)
         # but don't flip - rotate:
-        R_fromWND_toENU = o3d.geometry.get_rotation_matrix_from_xyz((0, np.pi, 0.1*np.pi))
+        R_fromWND_toENU = o3d.geometry.get_rotation_matrix_from_xyz((0, np.pi, rot_offset))
         enu_points = np.matmul(rotated_points, R_fromWND_toENU)
         # R_fromWND_toNED = o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.pi / 2))
         # ned_points = np.matmul(rotated_points, R_fromWND_toNED)
@@ -312,9 +258,12 @@ def main():
 
         # get vehicle_ids
         vehicle_ids = np.where((cluster[:,4] == (1 or 4 or 5)))
+        if len(vehicle_ids[0]) == 0:
+            print('no vehicles here')
+            continue
         enu_vehs_top_down = enu_points[:,:2][vehicle_ids]
         # ned_vehs_top_down = ned_points[:,:2][vehicle_ids]
-        # ned_vehs_top_down[:,1] = -ned_vehs_top_down[:,1]
+
         # translate to map_coords
         translation = np.array(LonLat_To_XY(latlong[1], latlong[0]))
         if print_info: print('translation ', translation)
@@ -330,22 +279,23 @@ def main():
         ppoints = vehs_top_down_pixels.astype(np.int64)
         # remove duplicates
         upoints = np.vstack([np.array(u) for u in set([tuple(p) for p in ppoints])])
-        upoints[:,0] += -offset
-        upoints[:,1] += offset
+        upoints[:,0] += yoffset
+        upoints[:,1] += xoffset
         for p in upoints:
             if is_cyclelane[p[0], p[1]]:
                 heatmap[p[0], p[1]] += 1
+                heatmap_points.append([p[0], p[1]])
 
         if plot_cluster or REMOVE_LATER == 100: 
             heatmap_mask = (heatmap > 0).astype(np.int64)
             im_map[:,:,0] = heatmap_mask
             new_center = new_center.astype(np.int64)
-            im_map[new_center[0]+20, new_center[1]-20] = [1,0,0,1]
+            im_map[new_center[0]+xoffset, new_center[1]+yoffset] = [1,0,0,1]
             fig, ax = plt.subplots()
             ax.imshow(im_map)
-            ax.scatter(vehs_top_down_pixels[:,1]+20, vehs_top_down_pixels[:,0]-20, s=1)
-            # ax.set_xlim((new_center[1]-1000,new_center[0]+1000))
-            # ax.set_ylim((new_center[1]-1000,new_center[0]+1000))
+            ax.scatter(vehs_top_down_pixels[:,1]+xoffset, vehs_top_down_pixels[:,0]+yoffset, s=1, c='r')
+            # ax.set_xlim((new_center[1]-100,new_center[0]+100))
+            # ax.set_ylim((new_center[1]-100,new_center[0]+100))
             plt.show()
 
             import pdb; pdb.set_trace()
@@ -374,15 +324,16 @@ def main():
         # if REMOVE_LATER == 100:
         #     import pdb; pdb.set_trace()
             
-    heatmap_mask = (heatmap > 0).astype(np.int64)
-    im_map[:,:,0] = heatmap_mask
+    # heatmap_mask = (heatmap > 0).astype(np.int64)
+    # im_map[:,:,0] = heatmap_mask
 
-    with open('heatmap.pkl', 'wb') as handle:
+    with open('{}_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('im_map.pkl', 'wb') as handle:
+    with open('{}_im_map.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(im_map, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        
-    import pdb; pdb.set_trace()
+
+      
+
 
 if __name__ == '__main__':
     main()
