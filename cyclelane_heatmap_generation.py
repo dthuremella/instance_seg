@@ -225,7 +225,7 @@ def main():
         yoffset = -20
         rot_offset = 0.1*np.pi
         iou_threshold = 0.3
-        persistency_threshold = 5
+        persistency_threshold = 4
     
     elif map_name == 'centerloop':      # only implemented for remote
         csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-11-08-11-14-25/motion'
@@ -233,7 +233,7 @@ def main():
         xoffset = 0
         yoffset = 0
         rot_offset = -0.1*np.pi
-        persistency_threshold = 5
+        persistency_threshold = 4
     
     elif map_name == 'southloop':       # only implemented for local
         csv_dir = 'south_loop_csvs' 
