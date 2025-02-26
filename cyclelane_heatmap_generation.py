@@ -8,6 +8,53 @@ import pandas as pd
 import open3d as o3d
 import math
 
+def displacement(path):
+    if len(path) < 2:
+        return 0
+    return np.linalg.norm(path[-1] - path[0])
+
+
+def iou(center1, volume1, center2, volume2):
+    """ Compute the IoU of two 3D bounding boxes defined by center and volume.
+    Parameters:
+        center1, center2: (x, y, z) - The center coordinates of the boxes.
+        volume1, volume2: (w, h, d) - The width, height, and depth of the boxes.
+    Returns:
+        IoU value (float)
+    """
+    x1, y1, z1 = center1
+    w1, h1, d1 = volume1
+
+    x2, y2, z2 = center2
+    w2, h2, d2 = volume2
+
+    # Convert to (min, max) format
+    x1_min, x1_max = x1 - w1 / 2, x1 + w1 / 2
+    y1_min, y1_max = y1 - h1 / 2, y1 + h1 / 2
+    z1_min, z1_max = z1 - d1 / 2, z1 + d1 / 2
+
+    x2_min, x2_max = x2 - w2 / 2, x2 + w2 / 2
+    y2_min, y2_max = y2 - h2 / 2, y2 + h2 / 2
+    z2_min, z2_max = z2 - d2 / 2, z2 + d2 / 2
+
+    # Compute the intersection boundaries
+    x_min_inter = max(x1_min, x2_min)
+    y_min_inter = max(y1_min, y2_min)
+    z_min_inter = max(z1_min, z2_min)
+    x_max_inter = min(x1_max, x2_max)
+    y_max_inter = min(y1_max, y2_max)
+    z_max_inter = min(z1_max, z2_max)
+
+    # Compute intersection dimensions
+    inter_w = max(0, x_max_inter - x_min_inter)
+    inter_h = max(0, y_max_inter - y_min_inter)
+    inter_d = max(0, z_max_inter - z_min_inter)
+    
+    inter_volume = inter_w * inter_h * inter_d
+    union_volume = np.prod(volume1) + np.prod(volume2) - inter_volume
+
+    return inter_volume / union_volume
+
 # # r_earth = 6.378137*10^6 meters
 # center_pixel = [6397, 6510]
 # center_latlong = [51.749780400568554, -1.2339014542218842]
@@ -128,7 +175,7 @@ def point_cloud_volume(points):
     dx = np.max(points[:,0]) - np.min(points[:,0])
     dy = np.max(points[:,1]) - np.min(points[:,1])
     dz = np.max(points[:,2]) - np.min(points[:,2])
-    return dx * dy * dz
+    return np.array([dx,dy,dz])
 def point_cloud_center(points):
     cx = np.mean(points[:,0])
     cy = np.mean(points[:,1])
@@ -154,14 +201,15 @@ def main():
 
     csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-10-18-15-10-24/motion'
 
+
     instance_seg_dir = 'north_loop_clustering_instance_seg_labeled'
 
     plot_cluster = False
 
-    # offset = 20 # calculated by eye for map, for x and y (20 for northloop)
-    xoffset = 20   # by eye, 20 for northloop, 0 for central, 0 for south
-    yoffset = -20     # by eye, -20 for northloop, 0 for central, 0 for south
-    rot_offset = 0.1*np.pi   # by eye, 0.1*np.pi for north, -0.1*np.pi for central, 0 for south
+    # offset = 20           # calculated by eye for map, for x and y (20 for northloop)
+    xoffset = 20            # by eye, 20 for northloop, 0 for central, 0 for south
+    yoffset = -20           # by eye, -20 for northloop, 0 for central, 0 for south
+    rot_offset = 0.1*np.pi  # by eye, 0.1*np.pi for north, -0.1*np.pi for central, 0 for south
     print_info = False
 
     ########################################################
@@ -207,6 +255,12 @@ def main():
     # read instance_seg files
     instance_seg_files = [f for f in listdir(instance_seg_dir) if isfile(join(instance_seg_dir, f))]
 
+    vehicles_in_last_frame = {} # key is track_id, value is most recent (center, volume) where center is (x,y,z) and volume is (w,h,d)
+    track_ids_per_pixel = {} # key is (x,y) tuple, value is set of track_ids (use set.add() to add)
+    num_frames_per_track_id = {}
+    path_per_track_id = {}
+    track_id_incr = 0
+
     for f in sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0]))):
         filename = (instance_seg_dir + '/' + f)
         filenumber = filename.split('/')[-1].split('.')[0]
@@ -245,25 +299,36 @@ def main():
         # R_fromWND_toNED = o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.pi / 2))
         # ned_points = np.matmul(rotated_points, R_fromWND_toNED)
 
+        inst_id_to_centers = {}
+        inst_id_to_volumes = {}
         # remove cars with >2m height center, small volume
         is_veh = np.where((cluster[:,4] == (1 or 4 or 5)))
         for inst_id in np.unique(cluster[:,5][is_veh]):
             is_inst = np.where(cluster[:,5] == inst_id)
             inst_points = enu_points[is_inst][:,:3]
-            if ((point_cloud_volume(inst_points) < 1) or # less than 1m cubed
-                (point_cloud_center(inst_points)[-1] > 2)): # higher than 2m
+            pc_volume  = point_cloud_volume(inst_points)
+            pc_center = point_cloud_center(inst_points)
+            if ((np.prod(pc_volume) < 1) or # less than 1m cubed
+                (pc_center[-1] > 2)): # higher than 2m 
                 for i in is_inst: cluster[i,4] = 0 # put it in unknown class
-                if print_info: print('inst_id {} is too small {} or high {}'.format(inst_id, 
-                            point_cloud_volume(inst_points),
-                            point_cloud_center(inst_points)[-1]))
-
+                if print_info: print('inst_id {} is too small {} or high {}'.format(inst_id, np.prod(pc_volume), pc_center[-1]))
+            else:
+                inst_id_to_centers[inst_id] = pc_center
+                inst_id_to_volumes[inst_id] = pc_volume
+                    
         # get vehicle_ids
         vehicle_ids = np.where((cluster[:,4] == (1 or 4 or 5)))
         if len(vehicle_ids[0]) == 0:
             print('no vehicles here')
             continue
+        enu_vehs = np.concatenate((enu_points[:,:][vehicle_ids], cluster[:,3:][vehicle_ids]), axis=1)
         enu_vehs_top_down = enu_points[:,:2][vehicle_ids]
         # ned_vehs_top_down = ned_points[:,:2][vehicle_ids]
+
+        # save indexes for each segmented instance
+        inst_id_to_indexes = {}
+        for inst_id in np.unique(enu_vehs[:,5]):
+            inst_id_to_indexes[inst_id] = np.where(enu_vehs[:,5] == inst_id)
 
         # translate to map_coords
         translation = np.array(LonLat_To_XY(latlong[1], latlong[0]))
@@ -281,6 +346,49 @@ def main():
         new_center[1] += yoffset
 
         ppoints = vehs_top_down_pixels.astype(np.int64)
+
+        # Do Tracking
+        vehicles_in_this_frame = {}
+        for inst_id in inst_id_to_indexes:
+            center = inst_id_to_centers[inst_id]
+            volume = inst_id_to_volumes[inst_id]
+            inst_points = ppoints[inst_id_to_indexes[inst_id]]
+            inst_points = np.vstack([np.array(u) for u in set([tuple(p) for p in ppoints])])
+            inst_points[:,0] += yoffset; inst_points[:,1] += xoffset
+
+            # check if this object is already being tracked
+            track_id = -1
+            for tid_last in vehicles_in_last_frame:
+                center_tid, volume_tid = vehicles_in_last_frame[tid_last]
+                if iou(center, volume, center_tid, volume_tid) > 0.3: # threshold is 0.3
+                    assert track_id == -1, 'two objects are being mapped to same track {} - increase threshold'.format(track_id)
+                    track_id = tid_last
+            # if not, assign a new track id
+            if track_id == -1:
+                track_id = track_id_incr
+                track_id_incr += 1
+
+            # add each vehicle in this frame
+            vehicles_in_this_frame[track_id] = (center, volume)
+
+            # uptick frame count of this vehicle
+            if track_id not in num_frames_per_track_id:
+                num_frames_per_track_id[track_id] = 0
+                path_per_track_id[track_id] = []
+            num_frames_per_track_id[track_id] += 1
+            path_per_track_id[track_id].append(center)
+
+            # mark its points as seen by this track_id
+            for p in inst_points:
+                key = (p[0], p[1])
+                if key not in track_ids_per_pixel:
+                    track_ids_per_pixel[key] = set()
+                track_ids_per_pixel[key].add(track_id)
+
+        vehicles_in_last_frame = vehicles_in_this_frame
+        if print_info: print('vehicles in this frame: ', vehicles_in_this_frame.keys())
+        # TODO add count to pixels vehicle dict
+
         # remove duplicates
         upoints = np.vstack([np.array(u) for u in set([tuple(p) for p in ppoints])])
         upoints[:,0] += yoffset
@@ -293,23 +401,27 @@ def main():
             
 
         if plot_cluster or REMOVE_LATER == 100: 
-            heatmap_mask = (heatmap > 0).astype(np.int64)
-            im_map[:,:,0] = heatmap_mask
-            im_map[new_center[0], new_center[1]] = [1,0,0,1]
+            # heatmap_mask = (heatmap > 0).astype(np.int64)
+            # im_map[:,:,0] = heatmap_mask
+            # im_map[new_center[0], new_center[1]] = [1,0,0,1]
+            # fig, ax = plt.subplots()
+            # ax.imshow(im_map)
+            # ax.scatter(vehs_top_down_pixels[:,1]+xoffset, vehs_top_down_pixels[:,0]+yoffset, s=1, c='r')
+            # # ax.set_xlim((new_center[1]-100,new_center[0]+100))
+            # # ax.set_ylim((new_center[1]-100,new_center[0]+100))
+            # plt.show()
+
+            
             fig, ax = plt.subplots()
-            ax.imshow(im_map)
-            ax.scatter(vehs_top_down_pixels[:,1]+xoffset, vehs_top_down_pixels[:,0]+yoffset, s=1, c='r')
-            # ax.set_xlim((new_center[1]-100,new_center[0]+100))
-            # ax.set_ylim((new_center[1]-100,new_center[0]+100))
+            ax.axis('off')  # command for hiding the axis. 
+            ps = enu_points[np.where(cluster[:,4] != 0)]
+            cs = cluster[np.where(cluster[:,4] != 0)]
+            ax.scatter(np.flip(ps[:,0]), np.flip(ps[:,1]), s=(50/np.flip(cs[:,5])), edgecolors='k', linewidths=0.01, cmap='magma_r', c=np.flip(cs[:,5]))
+            # ax.set_xlim((-25,25))
+            # ax.set_ylim((-25,25))
             plt.show()
 
             import pdb; pdb.set_trace()
-            
-            # fig, ax = plt.subplots()
-            # ax.scatter(enu_vehs_top_down[:,0], enu_vehs_top_down[:,1], s=1)
-            # # ax.set_xlim((-25,25))
-            # # ax.set_ylim((-25,25))
-            # plt.show()
 
             # cluster_to_plot = enu_points
             # fig = plt.figure()
@@ -331,6 +443,18 @@ def main():
             
     # heatmap_mask = (heatmap > 0).astype(np.int64)
     # im_map[:,:,0] = heatmap_mask
+
+    persisting_tracks = [k for k in num_frames_per_track_id if (num_frames_per_track_id[k] > 7   # persistent threshold = 5 frames
+                                                                and displacement(path_per_track_id[k]) > 2)] # be sure car isn't parked (2m threshold)
+
+    tracked_occupancy_heatmap = np.zeros(im_map[:,:,0].shape)
+    for key in track_ids_per_pixel:
+        all_track_ids = track_ids_per_pixel[key] # set of track_ids
+        real_track_ids = all_track_ids.intersection(persisting_tracks) 
+        tracked_occupancy_heatmap[key[0], key[1]] = len(real_track_ids)
+
+    with open('{}_tracked_occupancy_heatmap.pkl'.format(map_name), 'wb') as handle:
+        pickle.dump(tracked_occupancy_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     with open('{}_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
