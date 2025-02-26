@@ -193,7 +193,10 @@ def main():
     map_name = 'northloop' if args.map_name is None else args.map_name
     local = False if args.local is None else args.local
 
-    with open('{}_loop_concat_to_right_translation.pkl'.format(map_name.split('loop')[0]), 'rb') as handle:
+    short_name = map_name.split('loop')[0]
+    if short_name == 'center':
+        short_name = 'central'
+    with open('{}_loop_concat_to_right_translation.pkl'.format(short_name), 'rb') as handle:
         # filename_to_timestamp = pickle.load(handle)
         bad_dict = pickle.load(handle)
     bad_keys = [k  for  k in  bad_dict.keys()]
