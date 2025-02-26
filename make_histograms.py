@@ -5,24 +5,27 @@ import pickle
 import skimage.measure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-map_name = 'center'
+map_name = 'north' # 'south', 'north', 'center'
+heatmap_type = 'tracked_occupancy' # 'dist', 'tracked_occupancy'
+
 with open('{}loop_heatmap.pkl'.format(map_name), 'rb') as f:
     heatmap = pickle.load(f)
 with open('{}loop_im_map.pkl'.format(map_name), 'rb') as f:
     im_map = pickle.load(f)
 
 ###### for dist heatmap ###################################
-with open('{}loop_dist_heatmap.pkl'.format(map_name), 'rb') as f:
-    dist_heatmap = pickle.load(f)
-    map_name = 'dist_' + map_name
-    dist_heatmap += 0.01
-    heatmap = 1 / dist_heatmap
+with open('{}loop_{}_heatmap.pkl'.format(map_name, heatmap_type), 'rb') as f:
+    heatmap = pickle.load(f)
+
+if heatmap_type == 'dist':
+    heatmap += 0.01
+    heatmap = 1 / heatmap
 
 
 reduced = skimage.measure.block_reduce(heatmap, (150,150), np.sum)
 plt.axis('off')  # command for hiding the axis. 
 plt.imshow(reduced)
-plt.savefig('{}_loop_heatmap.png'.format(map_name), bbox_inches='tight', pad_inches=0)
+plt.savefig('{}_loop_{}heatmap.png'.format(map_name, heatmap_type), bbox_inches='tight', pad_inches=0)
 
 
 # make histogram map figures
@@ -61,4 +64,4 @@ sc = ax.scatter(midpoint_counts[:,1], midpoint_counts[:,0],
 # plt.show()
 # import pdb; pdb.set_trace()
 
-plt.savefig("hotspot_heatmap_"+map_name+".png", bbox_inches='tight', pad_inches=0)
+plt.savefig("hotspot_{}heatmap_".format(heatmap_type)+map_name+".png", bbox_inches='tight', pad_inches=0)
