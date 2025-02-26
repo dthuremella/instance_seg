@@ -7,6 +7,7 @@ import pickle
 import pandas as pd
 import open3d as o3d
 import math
+import argparse
 
 def displacement(path):
     if len(path) < 2:
@@ -183,8 +184,16 @@ def point_cloud_center(points):
     return np.array([cx,cy,cz])
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--map_name", help='northloop southloop or centerloop', type=str)
+    parser.add_argument("--local", action="store_true")    
+    args = parser.parse_args()
+    
     ############ params to change ##########################
-    with open('north_loop_concat_to_right_translation.pkl', 'rb') as handle:
+    map_name = 'northloop' if args.map_name is None else args.map_name
+    local = False if args.local is None else args.local
+
+    with open('{}_loop_concat_to_right_translation.pkl'.format(map_name.split('loop')[0]), 'rb') as handle:
         # filename_to_timestamp = pickle.load(handle)
         bad_dict = pickle.load(handle)
     bad_keys = [k  for  k in  bad_dict.keys()]
@@ -197,22 +206,45 @@ def main():
         val = bad_vals[i]
         filename_to_timestamp[key] = val
 
-    map_name = 'northloop'
-
-    csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-10-18-15-10-24/motion'
-
-
-    instance_seg_dir = 'north_loop_clustering_instance_seg_labeled'
-
     plot_cluster = False
-
-    # offset = 20           # calculated by eye for map, for x and y (20 for northloop)
-    xoffset = 20            # by eye, 20 for northloop, 0 for central, 0 for south
-    yoffset = -20           # by eye, -20 for northloop, 0 for central, 0 for south
-    rot_offset = 0.1*np.pi  # by eye, 0.1*np.pi for north, -0.1*np.pi for central, 0 for south
     print_info = False
 
+    iou_threshold = 0.25
+    displacement_threshold = 0 # currently including parked cars # based on plot, 1.3m disp means not parked
+
+    if map_name == 'northloop':
+        if local:
+            csv_dir = 'NorthLoop-2024-10-18'
+            instance_seg_dir = 'clustering_instance_seg_labeled'
+        else:
+            csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-10-18-15-10-24/motion'
+            instance_seg_dir = 'north_loop_clustering_instance_seg_labeled'
+        xoffset = 20
+        yoffset = -20
+        rot_offset = 0.1*np.pi
+        persistency_threshold = 7
+    
+    elif map_name == 'centerloop':      # only implemented for remote
+        csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-11-08-11-14-25/motion'
+        instance_seg_dir = 'central_loop_clustering_instance_seg_labeled'
+        xoffset = 0
+        yoffset = 0
+        rot_offset = -0.1*np.pi
+        persistency_threshold = 5
+    
+    elif map_name == 'southloop':       # only implemented for local
+        csv_dir = 'south_loop_csvs' 
+        instance_seg_dir = 'south_loop_clustering_instance_seg_labeled'
+        xoffset = 0
+        yoffset = 0
+        rot_offset = 0
+        # in 3 frames, can catch a car that's gone 2m (because of the overlap (1m per frame, 50% overlap per frame))
+        persistency_threshold = 2 
+    else:
+        raise ValueError('map_name must be one of: {}'.format(map_names))
+
     ########################################################
+    print(map_name)
 
     # read gps and imu csvs
     gps_filename = csv_dir + '/gps.csv'
@@ -360,8 +392,8 @@ def main():
             track_id = -1
             for tid_last in vehicles_in_last_frame:
                 center_tid, volume_tid = vehicles_in_last_frame[tid_last]
-                if iou(center, volume, center_tid, volume_tid) > 0.3: # threshold is 0.3
-                    assert track_id == -1, 'two objects are being mapped to same track {} - increase threshold'.format(track_id)
+                if iou(center, volume, center_tid, volume_tid) > iou_threshold: # threshold is 0.3
+                    assert track_id == -1, 'two objects are being mapped to same track {} - increase iou threshold'.format(track_id)
                     track_id = tid_last
             # if not, assign a new track id
             if track_id == -1:
@@ -443,9 +475,12 @@ def main():
             
     # heatmap_mask = (heatmap > 0).astype(np.int64)
     # im_map[:,:,0] = heatmap_mask
+    with open('{}_path_per_track_id.pkl'.format(map_name), 'wb') as handle:
+        pickle.dump(path_per_track_id, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    persisting_tracks = [k for k in num_frames_per_track_id if (num_frames_per_track_id[k] > 7   # persistent threshold = 5 frames
-                                                                and displacement(path_per_track_id[k]) > 2)] # be sure car isn't parked (2m threshold)
+    persisting_tracks = [k for k in num_frames_per_track_id if 
+            (num_frames_per_track_id[k] > persistency_threshold   # persistency threshold = 7 frames for northloop
+            and displacement(path_per_track_id[k]) > displacement_threshold)] # be sure car isn't parked (2m threshold)
 
     tracked_occupancy_heatmap = np.zeros(im_map[:,:,0].shape)
     for key in track_ids_per_pixel:
