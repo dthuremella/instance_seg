@@ -191,11 +191,10 @@ def main():
     
     ############ params to change ##########################
     map_name = 'northloop' if args.map_name is None else args.map_name
-    local = False if args.local is None else args.local
+    local = args.local
 
     short_name = map_name.split('loop')[0]
-    if short_name == 'center':
-        short_name = 'central'
+    if short_name == 'center': short_name = 'central'
     with open('{}_loop_concat_to_right_translation.pkl'.format(short_name), 'rb') as handle:
         # filename_to_timestamp = pickle.load(handle)
         bad_dict = pickle.load(handle)
@@ -225,7 +224,8 @@ def main():
         xoffset = 20
         yoffset = -20
         rot_offset = 0.1*np.pi
-        persistency_threshold = 7
+        iou_threshold = 0.3
+        persistency_threshold = 5
     
     elif map_name == 'centerloop':      # only implemented for remote
         csv_dir = '/Volumes/scratchdata/robotcycle_exports/2024-11-08-11-14-25/motion'
