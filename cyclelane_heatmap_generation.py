@@ -14,6 +14,42 @@ def displacement(path):
         return 0
     return np.linalg.norm(path[-1] - path[0])
 
+# Functions
+def line(point0, point1):
+    x0, y0 = point0
+    x1, y1 = point1
+    a = y0 - y1
+    b = x1 - x0
+    c = x0*y1 - x1*y0
+    return a, b, c
+
+def intersect(line0, line1):
+    a0, b0, c0 = line0
+    a1, b1, c1 = line1
+    D = a0*b1 - a1*b0 # D==0 then two lines overlap
+    if D==0: D = np.nan
+    x = (b0*c1 - b1*c0)/D
+    y = (a1*c0 - a0*c1)/D
+#    x[np.isnan(x)] = np.inf
+#   y[np.isnan(y)] = np.inf
+    return np.array([x, y])
+
+# p1 is np array of x,y, v1 is numpy array of velx, vely
+def ttc(p1, v1, p2, v2):
+    line1 = line(p1, p1+v1)
+    line2 = line(p2, p2+v2)
+    p_impact = intersect(line1, line2)
+
+    # never intersect
+    if np.any(np.isnan(p_impact)): return np.inf
+
+    # calculate ttc for vehicle 1 (would be same as vehicle 2)
+    dist = np.linalg.norm(p1 - p_impact)
+    vel = np.linalg.norm(v1)
+
+    return dist / vel
+
+
 
 def iou(center1, volume1, center2, volume2):
     """ Compute the IoU of two 3D bounding boxes defined by center and volume.
@@ -293,9 +329,11 @@ def main():
 
     vehicles_in_last_frame = {} # key is track_id, value is most recent (center, volume) where center is (x,y,z) and volume is (w,h,d)
     track_ids_per_pixel = {} # key is (x,y) tuple, value is set of track_ids (use set.add() to add)
+    ttc_per_pixel = {} # key is (x,y) tuple, value is min ttc at that pixel
     num_frames_per_track_id = {}
     path_per_track_id = {}
     track_id_incr = 0
+    old_center = None
 
     for f in sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0]))):
         filename = (instance_seg_dir + '/' + f)
@@ -407,23 +445,33 @@ def main():
             # add each vehicle in this frame
             vehicles_in_this_frame[track_id] = (center, volume)
 
-            # uptick frame count of this vehicle
+            # uptick frame count of this vehicle and add frame to trackid
             if track_id not in num_frames_per_track_id:
                 num_frames_per_track_id[track_id] = 0
                 path_per_track_id[track_id] = []
             num_frames_per_track_id[track_id] += 1
             path_per_track_id[track_id].append(center)
 
+            inst_ttc = np.inf
+            inst_path = path_per_track_id[track_id]
+            if len(inst_path) > 1 and old_center:
+                ego_vel = new_center - old_center
+                inst_vel = inst_path[-1] - inst_path[-2]
+                inst_ttc = ttc(p1=new_center[:2], v1=ego_vel, #ego bicycle position and velocity
+                               p2=center[:2], v2=inst_vel[:2]) # track_id vehicle's position and velocity
+
             # mark its points as seen by this track_id
             for p in inst_points:
                 key = (p[0], p[1])
                 if key not in track_ids_per_pixel:
                     track_ids_per_pixel[key] = set()
+                    ttc_per_pixel[key] = np.inf
                 track_ids_per_pixel[key].add(track_id)
+                ttc_per_pixel[key] = min(ttc_per_pixel[key], inst_ttc)
 
         vehicles_in_last_frame = vehicles_in_this_frame
+        old_center = new_center
         if print_info: print('vehicles in this frame: ', vehicles_in_this_frame.keys())
-        # TODO add count to pixels vehicle dict
 
         # remove duplicates
         upoints = np.vstack([np.array(u) for u in set([tuple(p) for p in ppoints])])
@@ -479,21 +527,28 @@ def main():
             
     # heatmap_mask = (heatmap > 0).astype(np.int64)
     # im_map[:,:,0] = heatmap_mask
-    with open('{}_path_per_track_id.pkl'.format(map_name), 'wb') as handle:
-        pickle.dump(path_per_track_id, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    if print_info:
+        with open('{}_path_per_track_id.pkl'.format(map_name), 'wb') as handle:
+            pickle.dump(path_per_track_id, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     persisting_tracks = [k for k in num_frames_per_track_id if 
             (num_frames_per_track_id[k] > persistency_threshold   # persistency threshold = 7 frames for northloop
             and displacement(path_per_track_id[k]) > displacement_threshold)] # be sure car isn't parked (2m threshold)
 
     tracked_occupancy_heatmap = np.zeros(im_map[:,:,0].shape)
+    ttc_heatmap = np.zeros(im_map[:,:,0].shape)
     for key in track_ids_per_pixel:
         all_track_ids = track_ids_per_pixel[key] # set of track_ids
         real_track_ids = all_track_ids.intersection(persisting_tracks) 
         tracked_occupancy_heatmap[key[0], key[1]] = len(real_track_ids)
 
+        ttc_heatmap[key[0], key[1]] = ttc_per_pixel[key]
+
     with open('{}_tracked_occupancy_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(tracked_occupancy_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with open('{}_ttc_heatmap.pkl'.format(map_name), 'wb') as handle:
+        pickle.dump(ttc_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     with open('{}_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
