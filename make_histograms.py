@@ -9,12 +9,12 @@ import argparse
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--map_name", help='northloop southloop or centerloop', type=str)
-    parser.add_argument("--heatmap_type", help='tracked_occupancy or dist', type=str)
+    parser.add_argument("--heatmap_type", help='tracked_occupancy or dist or ttc', type=str)
     args = parser.parse_args()
 
     map_name = 'northloop' if args.map_name is None else args.map_name
 
-    # 'dist', 'tracked_occupancy'
+    # 'dist', 'tracked_occupancy', 'ttc'
     heatmap_type = 'tracked_occupancy' if args.heatmap_type is None else args.heatmap_type
 
     with open('{}_heatmap.pkl'.format(map_name), 'rb') as f:
@@ -26,7 +26,7 @@ def main():
     with open('{}_{}_heatmap.pkl'.format(map_name, heatmap_type), 'rb') as f:
         heatmap = pickle.load(f)
 
-    if heatmap_type == 'dist':
+    if heatmap_type in ['dist', 'ttc']:
         heatmap += 0.01
         heatmap = 1 / heatmap
 
