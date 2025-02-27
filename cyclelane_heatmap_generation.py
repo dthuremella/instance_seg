@@ -249,7 +249,7 @@ def main():
     print_info = False
 
     iou_threshold = 0.25
-    displacement_threshold = 0 # currently including parked cars # based on plot, 1.3m disp means not parked
+    displacement_threshold = 1.3 # currently including parked cars # based on plot, 1.3m disp means not parked
 
     if map_name == 'northloop':
         if local:
@@ -334,6 +334,7 @@ def main():
     path_per_track_id = {}
     track_id_incr = 0
     old_center = None
+    vehicles_per_frame = []
 
     for f in sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0]))):
         filename = (instance_seg_dir + '/' + f)
@@ -470,6 +471,7 @@ def main():
                 ttc_per_pixel[key] = min(ttc_per_pixel[key], inst_ttc)
 
         vehicles_in_last_frame = vehicles_in_this_frame
+        vehicles_per_frame.append(vehicles_in_this_frame)
         old_center = new_center
         if print_info: print('vehicles in this frame: ', vehicles_in_this_frame.keys())
 
@@ -543,6 +545,9 @@ def main():
         tracked_occupancy_heatmap[key[0], key[1]] = len(real_track_ids)
 
         ttc_heatmap[key[0], key[1]] = ttc_per_pixel[key]
+    
+    if displacement_threshold > 0:
+        map_name = '{}_noparked'.format(map_name)
 
     with open('{}_tracked_occupancy_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(tracked_occupancy_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -558,6 +563,18 @@ def main():
 
     with open('{}_im_map.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(im_map, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    num_vehicles_per_frame = []
+    num_moving_vehicles_per_frame = []
+    for vehicles in vehicles_per_frame:
+        num_vehicles_per_frame.append(len(vehicles))
+        num_moving_vehicles_per_frame.append(len(set(vehicles.keys()).intersection(persisting_tracks)))
+
+    print('average number of vehicles per frame (possible spurious detections): {}'.format(
+            np.mean(np.array(num_vehicles_per_frame))))
+    print('average number of vehicles per frame (persisting tracks that are not parked): {}'.format(
+            np.mean(np.array(num_moving_vehicles_per_frame))))
+
 
       
 
