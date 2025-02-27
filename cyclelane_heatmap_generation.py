@@ -454,7 +454,7 @@ def main():
 
             inst_ttc = np.inf
             inst_path = path_per_track_id[track_id]
-            if len(inst_path) > 1 and old_center:
+            if len(inst_path) > 1 and old_center is not None:
                 ego_vel = new_center - old_center
                 inst_vel = inst_path[-1] - inst_path[-2]
                 inst_ttc = ttc(p1=new_center[:2], v1=ego_vel, #ego bicycle position and velocity
@@ -536,7 +536,7 @@ def main():
             and displacement(path_per_track_id[k]) > displacement_threshold)] # be sure car isn't parked (2m threshold)
 
     tracked_occupancy_heatmap = np.zeros(im_map[:,:,0].shape)
-    ttc_heatmap = np.zeros(im_map[:,:,0].shape)
+    ttc_heatmap = np.zeros(im_map[:,:,0].shape) + np.inf
     for key in track_ids_per_pixel:
         all_track_ids = track_ids_per_pixel[key] # set of track_ids
         real_track_ids = all_track_ids.intersection(persisting_tracks) 
