@@ -15,20 +15,22 @@ def main():
     map_name = 'northloop' if args.map_name is None else args.map_name
 
     # 'dist', 'tracked_occupancy', 'ttc'
-    heatmap_type = 'tracked_occupancy' if args.heatmap_type is None else args.heatmap_type
+    heatmap_type = 'cyclelane_overlap' if args.heatmap_type is None else args.heatmap_type
 
-    with open('{}_heatmap.pkl'.format(map_name), 'rb') as f:
-        heatmap = pickle.load(f)
     with open('{}_im_map.pkl'.format(map_name), 'rb') as f:
         im_map = pickle.load(f)
 
     ###### for dist heatmap ###################################
-    with open('{}_{}_heatmap.pkl'.format(map_name, heatmap_type), 'rb') as f:
-        heatmap = pickle.load(f)
+    if args.heatmap_type is not None:
+        with open('{}_{}_heatmap.pkl'.format(map_name, heatmap_type), 'rb') as f:
+            heatmap = pickle.load(f)
 
-    if heatmap_type in ['dist', 'ttc']:
-        heatmap += 0.01
-        heatmap = 1 / heatmap
+        if heatmap_type in ['dist', 'ttc']:
+            heatmap += 0.01
+            heatmap = 1 / heatmap
+    else:
+        with open('{}_heatmap.pkl'.format(map_name), 'rb') as f:
+            heatmap = pickle.load(f)
 
 
     reduced = skimage.measure.block_reduce(heatmap, (150,150), np.sum)
