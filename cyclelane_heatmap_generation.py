@@ -229,8 +229,8 @@ def within_illegal_box(p, center, orientation, rot_offset):
     # rotate points so that straight ahead is (1,0) in pixel space
     R = o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.arctan2(straight_orientation[1], straight_orientation[0])))
     p0 = p - center # make the center (where the bike is at) 0,0
+    p0 = np.pad(p0, (0,1)) # add 0 at the end for z dim
     p_straight = np.matmul(p0, R) # make the orientation (where bike is facing) 1,0
-
     #uk law
     xmin = -8 # behind, 7.5px, 18m (conversion is px = 5/12*meters)
     xmax = 3 # in front, 2.5px, 6m
