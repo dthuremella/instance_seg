@@ -219,6 +219,30 @@ def point_cloud_center(points):
     cz = np.mean(points[:,2])
     return np.array([cx,cy,cz])
 
+# is the vehicle within the bounds where it's illegal to be so close to cyclist?
+# law is: must maintain 2-3s stopping distance behind cyclist, 
+# car can go in bike lane when bike is visible in rearview mirror (6m, 10-20ft)
+def within_illegal_box(p, center, orientation, rot_offset):
+    straight_orientation = np.matmul(orientation,    # same as WND to ENU orientation, but rotate extra 90deg to get from left lidar
+        o3d.geometry.get_rotation_matrix_from_xyz((0, np.pi, rot_offset-np.pi/2)))                  # to straight ahead orientation
+
+    # rotate points so that straight ahead is (1,0) in pixel space
+    R = o3d.geometry.get_rotation_matrix_from_xyz((0, 0, np.arctan2(straight_orientation[1], straight_orientation[0])))
+    p0 = p - center # make the center (where the bike is at) 0,0
+    p_straight = np.matmul(p0, R) # make the orientation (where bike is facing) 1,0
+
+    #uk law
+    xmin = -8 # behind, 7.5px, 18m (conversion is px = 5/12*meters)
+    xmax = 3 # in front, 2.5px, 6m
+    ymin, ymax = -1, 1 #left, right, 0.625px, 1.5m
+
+    if (xmin <= p_straight[0] <= xmax) and (ymin <= p_straight[1] <= ymax):
+        return True
+    else:
+        return False
+
+    
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--map_name", help='northloop southloop or centerloop', type=str)
@@ -316,11 +340,15 @@ def main():
     REMOVE_LATER = 0
     # read image map
     im_map = plt.imread('oxford_' + map_name + '.png') # do for northloop and southloop too
-    im_map[np.where(im_map[:,:,2] != 1)] = 0  # remove  except cycle_lanes and outlines
-    is_cyclelane = im_map.copy()
-    is_cyclelane[np.where(im_map[:,:,2]+im_map[:,:,1]+im_map[:,:,0] == 3)] = 0 #remove outlines
-    is_cyclelane = is_cyclelane[:,:,2]
+    is_cycleonly = im_map[:,:,0].copy()
+    is_cycleonly[np.where(im_map[:,:,1]+im_map[:,:,2] > 0)] = 0
+
+    is_cyclelane = im_map[:,:,2].copy()
+    is_cyclelane[np.where(im_map[:,:,0]+im_map[:,:,1] > 0)] = 0
+
+    im_map[np.where(im_map[:,:,2] != 1)] = 0  # remove  except shared cycle_lanes and outlines
     road_lines = im_map[:,:,1]
+
     heatmap = np.zeros(im_map[:,:,0].shape)
     dist_heatmap = np.zeros(im_map[:,:,0].shape) + np.inf
 
@@ -480,48 +508,50 @@ def main():
         upoints[:,0] += yoffset
         upoints[:,1] += xoffset
         for p in upoints:
-            if is_cyclelane[p[0], p[1]]:
+            if is_cycleonly[p[0], p[1]]:
+                heatmap[p[0], p[1]] += 1
+            elif is_cyclelane[p[0], p[1]] and within_illegal_box(p, new_center, orientation, rot_offset):
                 heatmap[p[0], p[1]] += 1
             dist = np.linalg.norm(p - new_center)
             dist_heatmap[p[0], p[1]] = min(dist_heatmap[p[0], p[1]], dist)
             
 
         if plot_cluster or REMOVE_LATER == 100: 
-            # heatmap_mask = (heatmap > 0).astype(np.int64)
-            # im_map[:,:,0] = heatmap_mask
-            # im_map[new_center[0], new_center[1]] = [1,0,0,1]
-            # fig, ax = plt.subplots()
-            # ax.imshow(im_map)
-            # ax.scatter(vehs_top_down_pixels[:,1]+xoffset, vehs_top_down_pixels[:,0]+yoffset, s=1, c='r')
-            # # ax.set_xlim((new_center[1]-100,new_center[0]+100))
-            # # ax.set_ylim((new_center[1]-100,new_center[0]+100))
-            # plt.show()
+            # # heatmap_mask = (heatmap > 0).astype(np.int64)
+            # # im_map[:,:,0] = heatmap_mask
+            # # im_map[new_center[0], new_center[1]] = [1,0,0,1]
+            # # fig, ax = plt.subplots()
+            # # ax.imshow(im_map)
+            # # ax.scatter(vehs_top_down_pixels[:,1]+xoffset, vehs_top_down_pixels[:,0]+yoffset, s=1, c='r')
+            # # # ax.set_xlim((new_center[1]-100,new_center[0]+100))
+            # # # ax.set_ylim((new_center[1]-100,new_center[0]+100))
+            # # plt.show()
 
             
-            fig, ax = plt.subplots()
-            ax.axis('off')  # command for hiding the axis. 
-            ps = enu_points[np.where(cluster[:,4] != 0)]
-            cs = cluster[np.where(cluster[:,4] != 0)]
-            ax.scatter(np.flip(ps[:,0]), np.flip(ps[:,1]), s=(50/np.flip(cs[:,5])), edgecolors='k', linewidths=0.01, cmap='magma_r', c=np.flip(cs[:,5]))
-            # ax.set_xlim((-25,25))
-            # ax.set_ylim((-25,25))
-            plt.show()
-
-            import pdb; pdb.set_trace()
-
-            # cluster_to_plot = enu_points
-            # fig = plt.figure()
-            # ax = fig.add_subplot(projection='3d')
-            # xs = cluster_to_plot[:,0][np.where(cluster[:,4] == 1)]
-            # ys = cluster_to_plot[:,1][np.where(cluster[:,4] == 1)]
-            # zs = cluster_to_plot[:,2][np.where(cluster[:,4] == 1)]
-            # colors = cluster[:,5][np.where(cluster[:,4] == 1)]
-            # ax.scatter(xs, ys, zs, c=colors, s=1)
-            # ax.set_xlabel('X Label')
-            # ax.set_ylabel('Y Label')
-            # ax.set_zlabel('Z Label')
+            # fig, ax = plt.subplots()
+            # ax.axis('off')  # command for hiding the axis. 
+            # ps = enu_points[np.where(cluster[:,4] != 0)]
+            # cs = cluster[np.where(cluster[:,4] != 0)]
+            # ax.scatter(np.flip(ps[:,0]), np.flip(ps[:,1]), s=(50/np.flip(cs[:,5])), edgecolors='k', linewidths=0.01, cmap='magma_r', c=np.flip(cs[:,5]))
+            # # ax.set_xlim((-25,25))
+            # # ax.set_ylim((-25,25))
             # plt.show()
+
+
+            cluster_to_plot = cluster[:,:3]
+            fig = plt.figure()
+            ax = fig.add_subplot(projection='3d')
+            xs = cluster_to_plot[:,0][np.where(cluster[:,4] == 1)]
+            ys = cluster_to_plot[:,1][np.where(cluster[:,4] == 1)]
+            zs = cluster_to_plot[:,2][np.where(cluster[:,4] == 1)]
+            colors = cluster[:,5][np.where(cluster[:,4] == 1)]
+            ax.scatter(xs, ys, zs, c=colors, s=1)
+            ax.set_xlabel('X Label')
+            ax.set_ylabel('Y Label')
+            ax.set_zlabel('Z Label')
+            plt.show()
         
+            import pdb; pdb.set_trace()
         
         # REMOVE_LATER = REMOVE_LATER + 1
         # if REMOVE_LATER == 100:
