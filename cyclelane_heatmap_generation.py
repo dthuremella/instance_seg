@@ -273,7 +273,7 @@ def main():
     print_info = False
 
     iou_threshold = 0.25
-    displacement_threshold = 1.3 # currently including parked cars # based on plot, 1.3m disp means not parked
+    displacement_threshold = 0 # currently including parked cars # based on plot, 1.3m disp means not parked
 
     if map_name == 'northloop':
         if local:
