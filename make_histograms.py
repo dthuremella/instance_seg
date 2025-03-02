@@ -43,7 +43,7 @@ def main():
         if heatmap_type == 'ttc':
             factor = 0.1
             max_val = 60 # max ttc is 1 minute
-            bin_size = 100
+            bin_size = 150
 
     else:
         with open('{}_heatmap.pkl'.format(map_name), 'rb') as f:
