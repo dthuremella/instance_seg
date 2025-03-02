@@ -349,7 +349,7 @@ def main():
     im_map[np.where(im_map[:,:,2] != 1)] = 0  # remove  except shared cycle_lanes and outlines
     road_lines = im_map[:,:,1]
 
-    heatmap = np.zeros(im_map[:,:,0].shape)
+    heatmap = np.zeros(im_map[:,:,0].shape) #change to include track_ids => num cars which overlap at each place
     dist_heatmap = np.zeros(im_map[:,:,0].shape) + np.inf
 
     # read instance_seg files
@@ -357,6 +357,7 @@ def main():
 
     vehicles_in_last_frame = {} # key is track_id, value is most recent (center, volume) where center is (x,y,z) and volume is (w,h,d)
     track_ids_per_pixel = {} # key is (x,y) tuple, value is set of track_ids (use set.add() to add)
+    cyclelane_overlap_track_ids_per_pixel = {} # key is (x,y) tuple, value is set of track_ids which overlap a cyclelane at that pixel
     ttc_per_pixel = {} # key is (x,y) tuple, value is min ttc at that pixel
     num_frames_per_track_id = {}
     path_per_track_id = {}
@@ -455,9 +456,6 @@ def main():
         for inst_id in inst_id_to_indexes:
             center = inst_id_to_centers[inst_id]
             volume = inst_id_to_volumes[inst_id]
-            inst_points = ppoints[inst_id_to_indexes[inst_id]]
-            inst_points = np.vstack([np.array(u) for u in set([tuple(p) for p in ppoints])])
-            inst_points[:,0] += yoffset; inst_points[:,1] += xoffset
 
             # check if this object is already being tracked
             track_id = -1
@@ -490,6 +488,9 @@ def main():
                                p2=center[:2], v2=inst_vel[:2]) # track_id vehicle's position and velocity
 
             # mark its points as seen by this track_id
+            inst_points = ppoints[inst_id_to_indexes[inst_id]]
+            inst_points = np.vstack([np.array(u) for u in set([tuple(p) for p in ppoints])])
+            inst_points[:,0] += yoffset; inst_points[:,1] += xoffset
             for p in inst_points:
                 key = (p[0], p[1])
                 if key not in track_ids_per_pixel:
@@ -497,6 +498,12 @@ def main():
                     ttc_per_pixel[key] = np.inf
                 track_ids_per_pixel[key].add(track_id)
                 ttc_per_pixel[key] = min(ttc_per_pixel[key], inst_ttc)
+
+                if (is_cycleonly[p[0], p[1]] or
+                   (is_cyclelane[p[0], p[1]] and within_illegal_box(p, new_center, orientation, rot_offset))):
+                    if key not in cyclelane_overlap_track_ids_per_pixel:
+                        cyclelane_overlap_track_ids_per_pixel[key] = set()
+                    cyclelane_overlap_track_ids_per_pixel[key].add(track_id)
 
         vehicles_in_last_frame = vehicles_in_this_frame
         vehicles_per_frame.append(vehicles_in_this_frame)
@@ -508,6 +515,7 @@ def main():
         upoints[:,0] += yoffset
         upoints[:,1] += xoffset
         for p in upoints:
+            key = (p[0], p[1])
             if is_cycleonly[p[0], p[1]]:
                 heatmap[p[0], p[1]] += 1
             elif is_cyclelane[p[0], p[1]] and within_illegal_box(p, new_center, orientation, rot_offset):
@@ -564,32 +572,38 @@ def main():
             pickle.dump(path_per_track_id, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     persisting_tracks = [k for k in num_frames_per_track_id if 
-            (num_frames_per_track_id[k] > persistency_threshold   # persistency threshold = 7 frames for northloop
-            and displacement(path_per_track_id[k]) > displacement_threshold)] # be sure car isn't parked (2m threshold)
-
-    tracked_occupancy_heatmap = np.zeros(im_map[:,:,0].shape)
+            (num_frames_per_track_id[k] > persistency_threshold   # persistency threshold 
+            and displacement(path_per_track_id[k]) > displacement_threshold)] # be sure car isn't parked
+    
+    tracked_occupancy_heatmap = {}
     ttc_heatmap = np.zeros(im_map[:,:,0].shape) + np.inf
     for key in track_ids_per_pixel:
         all_track_ids = track_ids_per_pixel[key] # set of track_ids
         real_track_ids = all_track_ids.intersection(persisting_tracks) 
-        tracked_occupancy_heatmap[key[0], key[1]] = len(real_track_ids)
-
+        tracked_occupancy_heatmap[key] = real_track_ids
         ttc_heatmap[key[0], key[1]] = ttc_per_pixel[key]
+
+    # TODO should we do same logic as above for cyclelane_overlap? only persisting tracks? we def want parked cars included tho
     
     if displacement_threshold > 0:
         map_name = '{}_noparked'.format(map_name)
 
+    # dict with pixel x,y as key
     with open('{}_tracked_occupancy_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(tracked_occupancy_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    with open('{}_ttc_heatmap.pkl'.format(map_name), 'wb') as handle:
-        pickle.dump(ttc_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open('{}_cyclelane_overlap_heatmap.pkl'.format(map_name), 'wb') as handle:
+        pickle.dump(cyclelane_overlap_track_ids_per_pixel, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+    # full image
     with open('{}_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     with open('{}_dist_heatmap.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(dist_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with open('{}_ttc_heatmap.pkl'.format(map_name), 'wb') as handle:
+        pickle.dump(ttc_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     with open('{}_im_map.pkl'.format(map_name), 'wb') as handle:
         pickle.dump(im_map, handle, protocol=pickle.HIGHEST_PROTOCOL)
