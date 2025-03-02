@@ -584,6 +584,11 @@ def main():
         ttc_heatmap[key[0], key[1]] = ttc_per_pixel[key]
 
     # TODO should we do same logic as above for cyclelane_overlap? only persisting tracks? we def want parked cars included tho
+    cyclelane_overlap_heatmap = {}
+    for key in cyclelane_overlap_track_ids_per_pixel:
+        all_track_ids = cyclelane_overlap_track_ids_per_pixel[key]
+        real_track_ids = all_track_ids.intersection(persisting_tracks)
+        cyclelane_overlap_heatmap[key] = real_track_ids
     
     if displacement_threshold > 0:
         map_name = '{}_noparked'.format(map_name)
@@ -593,7 +598,7 @@ def main():
         pickle.dump(tracked_occupancy_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     with open('{}_cyclelane_overlap_heatmap.pkl'.format(map_name), 'wb') as handle:
-        pickle.dump(cyclelane_overlap_track_ids_per_pixel, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(cyclelane_overlap_heatmap, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     # full image
     with open('{}_heatmap.pkl'.format(map_name), 'wb') as handle:
