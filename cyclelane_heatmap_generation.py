@@ -263,7 +263,7 @@ def main():
     bad_vals = [v  for  v in  bad_dict.values()]
     bad_vals.sort()
     filename_to_timestamp = {}
-    start_frame = 100 if map_name != 'northloop' else 3000
+    start_frame = 100
     for i in range(start_frame, len(bad_keys)):
         key = bad_keys[i][:16]
         val = bad_vals[i]
@@ -365,7 +365,11 @@ def main():
     old_center = None
     vehicles_per_frame = []
 
+    northloop_count = 0
     for f in sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0]))):
+        if map_name == 'northloop' and northloop_count < 3000:
+            northloop_count += 1
+            continue
         filename = (instance_seg_dir + '/' + f)
         filenumber = filename.split('/')[-1].split('.')[0]
         filenumber = filenumber[:16]
