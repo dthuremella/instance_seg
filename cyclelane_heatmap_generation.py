@@ -263,7 +263,7 @@ def main():
     bad_vals = [v  for  v in  bad_dict.values()]
     bad_vals.sort()
     filename_to_timestamp = {}
-    start_frame = 100 if map_name != 'northloop' else 1000
+    start_frame = 100 if map_name != 'northloop' else 3000
     for i in range(start_frame, len(bad_keys)):
         key = bad_keys[i][:16]
         val = bad_vals[i]
