@@ -6,6 +6,16 @@ import skimage.measure
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import argparse
 
+htype_to_display = {
+    'tracked_occupancy': 'Vehicle Occupancy',
+    'cyclelane_overlap': 'Cyclelane Infringement',
+    'dist': 'Distance to Cyclist',
+    'ttc': 'TTC (Time to Collision)',
+    'all': 'Total Risk',
+    'all_no_to': 'Total Risk',
+    'all_no_to_no_dist': 'Total Risk'
+}
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--map_name", help='northloop southloop or centerloop', type=str)
@@ -19,6 +29,7 @@ def main():
 
     with open('{}_im_map.pkl'.format(map_name), 'rb') as f:
         im_map = pickle.load(f)
+        im_map[im_map[:,:,0] + im_map[:,:,2] == 1] = [0.75,1,1,1] # blue to lightblue
 
     ###### for all heatmaps ###################################
     max_val = {'dist': 10, 'ttc': 60} # max distance is 10m, max ttc is 1 minute
@@ -30,25 +41,42 @@ def main():
 
         if map_name == 'southloop':
             if heatmap_type == 'cyclelane_overlap':
-                factor = 20
+                factor = 200
                 exponent = 3
+
+            if heatmap_type == 'tracked_occupancy':
+                factor = 10
+                exponent = 1.8
+
+            if heatmap_type == 'dist':
+                factor = 20
+                exponent = 1.5
+
+            if heatmap_type == 'ttc':
+                factor = 0.5
+                exponent = 2
+
+        if map_name == 'centerloop':
+            if heatmap_type == 'cyclelane_overlap':
+                factor = 10
+                exponent = 2
 
             if heatmap_type == 'tracked_occupancy':
                 factor = 1
                 exponent = 1.8
 
             if heatmap_type == 'dist':
-                factor = 1
-                exponent = 2
+                factor = 20
+                exponent = 1.5
 
             if heatmap_type == 'ttc':
-                factor = 0.1
+                factor = 0.05
                 exponent = 2
 
-        if map_name == 'centerloop':
+        if map_name == 'northloop':
             if heatmap_type == 'cyclelane_overlap':
-                factor = 1
-                exponent = 2
+                factor = 100
+                exponent = 1
 
             if heatmap_type == 'tracked_occupancy':
                 factor = 1
@@ -59,32 +87,15 @@ def main():
                 exponent = 1.5
 
             if heatmap_type == 'ttc':
-                factor = 0.02
-                exponent = 2
-
-        if map_name == 'northloop':
-            if heatmap_type == 'cyclelane_overlap':
-                factor = 50
-                exponent = 1
-
-            if heatmap_type == 'tracked_occupancy':
-                factor = 1
-                exponent = 1.8
-
-            if heatmap_type == 'dist':
-                factor = 5
-                exponent = 1.5
-
-            if heatmap_type == 'ttc':
-                factor = 0.1
+                factor = 0.3
                 exponent = 1.5
 
     else:
-        heatmap_type = 'all'
+        heatmap_type = 'all_no_to'
         exponent = 1.3
-        factor = 100
+        factor = 1000 if map_name != 'northloop' else 500
         reduced_list = []
-        for htype in ['tracked_occupancy', 'cyclelane_overlap', 'dist', 'ttc']:
+        for htype in ['cyclelane_overlap', 'dist', 'ttc']: # ['tracked_occupancy', 'cyclelane_overlap', 'dist', 'ttc']:
             with open('{}_{}_reduced.pkl'.format(map_name, htype), 'rb') as f:
                 reduced = pickle.load(f)
             if htype in ['dist', 'ttc']:
@@ -94,11 +105,10 @@ def main():
             if len(reduced_list) != 0 and reduced_list[0].shape != reduced.shape:
                 reduced = np.pad(reduced, ((0, reduced_list[0].shape[0] - reduced.shape[0]), 
                                            (0, reduced_list[0].shape[1] - reduced.shape[1])), 'constant', constant_values=(0))
-            reduced_list.append(reduced / np.mean(reduced))
+            reduced_list.append(reduced / np.max(reduced))
 
         reduced_all = np.stack(reduced_list, axis=0)
         total_risk_heatmap = np.average(reduced_all, axis=0)
-        total_risk_heatmap = total_risk_heatmap / np.max(total_risk_heatmap)
 
         plt.axis('off')  # command for hiding the axis.
         plt.imshow(total_risk_heatmap)
@@ -175,9 +185,9 @@ def main():
         new_hmap = np.zeros((len(x_ticks), len(y_ticks)))
         midpoint_agg_vals = []
         for point in new_hmap_dict:
-            if ((heatmap_type == 'tracked_occupancy' and len(new_hmap_dict[point]) > 50) # set up issues in beginning of run
-                or (heatmap_type == 'cyclelane_overlap' and len(new_hmap_dict[point]) >= 15)): # weird outlier
-                continue
+            # if ((heatmap_type == 'tracked_occupancy' and len(new_hmap_dict[point]) >= 20) # likely misclassification of building
+            #     or (heatmap_type == 'cyclelane_overlap' and len(new_hmap_dict[point]) >= 10)): # in centerloop, yellow building looks like car
+            #     continue
             x_r = point[0] / len(x_ticks) * im_map.shape[0]
             y_r = point[1] / len(y_ticks) * im_map.shape[1]
             midpoint_agg_vals.append([x_r, y_r, len(new_hmap_dict[point])])
