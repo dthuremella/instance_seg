@@ -367,14 +367,14 @@ def main():
 
     northloop_count = 0
     for f in sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0]))):
-        if map_name == 'northloop' and northloop_count < 3000:
-            northloop_count += 1
-            continue
         filename = (instance_seg_dir + '/' + f)
         filenumber = filename.split('/')[-1].split('.')[0]
         filenumber = filenumber[:16]
         if filenumber not in filename_to_timestamp:
             print(filenumber + ' not in dict')
+            continue
+        if map_name == 'northloop' and northloop_count < 3000:
+            northloop_count += 1
             continue
 
         timestamp = int(filename_to_timestamp[filenumber])
