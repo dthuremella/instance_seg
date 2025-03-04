@@ -356,7 +356,7 @@ def main():
     instance_seg_files = [f for f in listdir(instance_seg_dir) if isfile(join(instance_seg_dir, f))]
     instance_seg_files = sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0])))
     if map_name == 'northloop':
-        instance_seg_files = instance_seg_files[1000:-1000]
+        instance_seg_files = instance_seg_files[2000:-500]
         
     vehicles_in_last_frame = {} # key is track_id, value is most recent (center, volume) where center is (x,y,z) and volume is (w,h,d)
     track_ids_per_pixel = {} # key is (x,y) tuple, value is set of track_ids (use set.add() to add)
