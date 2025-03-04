@@ -263,9 +263,8 @@ def main():
     bad_vals = [v  for  v in  bad_dict.values()]
     bad_vals.sort()
     filename_to_timestamp = {}
-    start_frame = 100 if map_name != 'northloop' else 3000
-    end_frame = len(bad_keys) if map_name != 'northloop' else len(bad_keys) - 1000
-    for i in range(start_frame, end_frame):
+    start_frame = 100
+    for i in range(start_frame, len(bad_keys)):
         key = bad_keys[i][:16]
         val = bad_vals[i]
         filename_to_timestamp[key] = val
@@ -355,7 +354,9 @@ def main():
 
     # read instance_seg files
     instance_seg_files = [f for f in listdir(instance_seg_dir) if isfile(join(instance_seg_dir, f))]
-
+    if map_name == 'northloop':
+        instance_seg_files = instance_seg_files[1000:-1000]
+        
     vehicles_in_last_frame = {} # key is track_id, value is most recent (center, volume) where center is (x,y,z) and volume is (w,h,d)
     track_ids_per_pixel = {} # key is (x,y) tuple, value is set of track_ids (use set.add() to add)
     cyclelane_overlap_track_ids_per_pixel = {} # key is (x,y) tuple, value is set of track_ids which overlap a cyclelane at that pixel
