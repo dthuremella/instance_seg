@@ -354,6 +354,7 @@ def main():
 
     # read instance_seg files
     instance_seg_files = [f for f in listdir(instance_seg_dir) if isfile(join(instance_seg_dir, f))]
+    instance_seg_files = sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0])))
     if map_name == 'northloop':
         instance_seg_files = instance_seg_files[1000:-1000]
         
@@ -367,7 +368,7 @@ def main():
     old_center = None
     vehicles_per_frame = []
 
-    for f in sorted(instance_seg_files, key=(lambda x : int(x.split('/')[-1].split('.')[0]))):
+    for f in instance_seg_files:
         filename = (instance_seg_dir + '/' + f)
         filenumber = filename.split('/')[-1].split('.')[0]
         filenumber = filenumber[:16]
